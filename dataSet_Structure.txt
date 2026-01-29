@@ -1,0 +1,12 @@
+PlantVillage/
+├── train/
+│   ├── Tomato___Healthy/
+│   ├── Tomato___Late_blight/
+│   ├── Potato___Early_blight/
+│   └── ...
+│
+└── val/
+    ├── Tomato___Healthy/
+    ├── Tomato___Late_blight/
+    ├── Potato___Early_blight/
+    └── ...
