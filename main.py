@@ -6,9 +6,6 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 
-# =========================
-# Class Mapping (38 Classes)
-# =========================
 class_indices = {
     'Apple___Apple_scab': 0, 'Apple___Black_rot': 1, 'Apple___Cedar_apple_rust': 2, 'Apple___healthy': 3,
     'Blueberry___healthy': 4, 'Cherry_(including_sour)___Powdery_mildew': 5, 'Cherry_(including_sour)___healthy': 6,
@@ -30,13 +27,11 @@ idx_to_class = {v: k for k, v in class_indices.items()}
 # =========================
 # Load Model
 # =========================
-def load_models():
-    # Adjusted to look for the .h5 file you saved
-    model_path = os.path.join("..", "VGG19.h5") 
+def load_models(modelPath):
+    model_path = os.path.join("..", modelPath) 
 
     print(f"Loading model from: {model_path}...")
     try:
-        # We use compile=False because we only need the model for inference (prediction)
         model = load_model(model_path, compile=False)
         print("Model loaded successfully!\n")
         return model
@@ -65,27 +60,30 @@ def predict_vgg19(img_path, model):
     img = image.load_img(img_path, target_size=(224, 224))
     x = image.img_to_array(img)
 
-    # 2. Rescale exactly like your ImageDataGenerator (rescale=1./255)
     x = x / 255.0
 
-    # 3. Add batch dimension
     x = np.expand_dims(x, axis=0)
 
-    # 4. Predict
     preds = model.predict(x)
     return preds
 
 # =========================
 # Main
 # =========================
-model = load_models()
+
+# call models
+VGG19_MODEL = "VGG19.h5"
+VGG16_MODEL = "VGG16.h5"
+RESNET101V2_MODEL = "resnet101v2.h5"
+VGG19model = load_models(VGG19_MODEL)
+VGG16model = load_models(VGG16_MODEL)
+resnet101v2Model = load_models(RESNET101V2_MODEL)
+
 selected_img = browse_image()
 
 if selected_img:
-    # Get the raw prediction array (no extra softmax temperature)
-    predictions = predict_vgg19(selected_img, model)[0]
+    predictions = predict_vgg19(selected_img, resnet101v2Model)[0]
 
-    # Get Top 3 indices
     top3_indices = np.argsort(predictions)[-3:][::-1]
 
     print("\n" + "="*60)
@@ -96,7 +94,6 @@ if selected_img:
         class_name = idx_to_class.get(idx, "Unknown")
         confidence = predictions[idx] * 100
 
-        # Split plant and disease for cleaner printing
         if "___" in class_name:
             plant, disease = class_name.split("___")
         else:
@@ -108,16 +105,14 @@ if selected_img:
         print(f"  Confidence : {confidence:.2f}%")
         print("-"*40)
 
-    # Final Result logic
     best_idx = top3_indices[0]
     best_conf = predictions[best_idx]
 
     print("="*60)
-    # Threshold for confidence (e.g., 50%)
     if best_conf < 0.5:
-        print("⚠️ Warning: Model is not confident. Please use a clearer image.")
+        print("Warning: Model is not confident. Please use a clearer image.")
     else:
-        print(f"✅ Final Prediction: {idx_to_class[best_idx]} ({best_conf*100:.2f}%)")
+        print(f"Final Prediction: {idx_to_class[best_idx]} ({best_conf*100:.2f}%)")
     print("="*60)
 
 else:
