@@ -1,5 +1,6 @@
-# -*- coding: utf-8 -*-
-
+# ==============================
+# Install dataset
+# ==============================
 !mkdir -p ~/.kaggle
 !cp kaggle.json ~/.kaggle/
 !chmod 600 ~/.kaggle/kaggle.json
@@ -7,179 +8,128 @@
 !kaggle datasets download -d mohitsingh1804/plantvillage
 !unzip plantvillage.zip
 
+# ==============================
+# Imports
+# ==============================
 import os
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
+import json
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import VGG19
+from tensorflow.keras.layers import Dense, Dropout, GlobalAveragePooling2D
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
 
+# ==============================
+# Paths
+# ==============================
 train_dir = "/content/PlantVillage/train"
 val_dir   = "/content/PlantVillage/val"
 
-# ==============================
-# Data Generator
-# ==============================
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.applications.inception_v3 import preprocess_input
+IMG_SIZE = (224,224)
+BATCH_SIZE = 32
 
-img_size = (299, 299)
-batch_size = 32
-
+# ==============================
+# Data generators
+# ==============================
 train_datagen = ImageDataGenerator(
-    preprocessing_function=preprocess_input,
-    rotation_range=40,
+    rescale=1./255,
+    rotation_range=30,
     width_shift_range=0.2,
     height_shift_range=0.2,
-    shear_range=0.2,
     zoom_range=0.2,
-    horizontal_flip=True,
-    fill_mode='nearest'
+    horizontal_flip=True
 )
 
-val_datagen = ImageDataGenerator(
-    preprocessing_function=preprocess_input
-)
+val_datagen = ImageDataGenerator(rescale=1./255)
 
 train_data = train_datagen.flow_from_directory(
     train_dir,
-    target_size=img_size,
-    batch_size=batch_size,
+    target_size=IMG_SIZE,
+    batch_size=BATCH_SIZE,
     class_mode='categorical'
 )
 
 val_data = val_datagen.flow_from_directory(
     val_dir,
-    target_size=img_size,
-    batch_size=batch_size,
-    class_mode='categorical',
-    shuffle=False
+    target_size=IMG_SIZE,
+    batch_size=BATCH_SIZE,
+    class_mode='categorical'
 )
 
 print("Classes:", train_data.num_classes)
 
 # ==============================
-# MODEL
+# Save class mapping
 # ==============================
-from tensorflow.keras.applications import InceptionV3
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, Dropout, GlobalAveragePooling2D, BatchNormalization
-from tensorflow.keras.optimizers import Adam
+with open("class_indices.json", "w") as f:
+    json.dump(train_data.class_indices, f)
 
-base_model = InceptionV3(
-    weights='imagenet',
+# ==============================
+# Model
+# ==============================
+base_model = VGG19(
+    weights="imagenet",
     include_top=False,
-    input_shape=(299,299,3)
+    input_shape=(224,224,3)
 )
 
-# Freeze most layers
-for layer in base_model.layers[:-30]:
+for layer in base_model.layers[:-5]:
     layer.trainable = False
 
-# Fine-tune last layers
-for layer in base_model.layers[-30:]:
-    layer.trainable = True
-
-# Head
 x = base_model.output
 x = GlobalAveragePooling2D()(x)
 
-x = Dense(512, activation='relu')(x)
-x = BatchNormalization()(x)
+x = Dense(512, activation="relu")(x)
 x = Dropout(0.4)(x)
 
-x = Dense(256, activation='relu')(x)
-x = BatchNormalization()(x)
+x = Dense(256, activation="relu")(x)
 x = Dropout(0.3)(x)
 
-output = Dense(train_data.num_classes, activation='softmax')(x)
+output = Dense(train_data.num_classes, activation="softmax")(x)
 
 model = Model(inputs=base_model.input, outputs=output)
 
 model.compile(
-    optimizer=Adam(5e-5),
-    loss='categorical_crossentropy',
-    metrics=['accuracy']
+    optimizer=Adam(1e-4),
+    loss="categorical_crossentropy",
+    metrics=["accuracy"]
 )
 
 model.summary()
 
 # ==============================
-# CALLBACKS (IMPROVED EARLY STOP)
+# Callbacks
 # ==============================
-from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
-
 checkpoint = ModelCheckpoint(
-    "best_inceptionv3.keras",
-    monitor='val_accuracy',
+    "plant_disease_model.h5",
+    monitor="val_accuracy",
     save_best_only=True,
-    mode='max',
+    mode="max",
     verbose=1
 )
 
 early_stop = EarlyStopping(
-    monitor='val_loss',
+    monitor="val_loss",
     patience=5,
-    restore_best_weights=True,
-    verbose=1
+    restore_best_weights=True
 )
 
 reduce_lr = ReduceLROnPlateau(
-    monitor='val_loss',
+    monitor="val_loss",
     factor=0.3,
-    patience=2,
-    min_lr=1e-6,
-    verbose=1
+    patience=2
 )
 
 # ==============================
-# TRAIN
+# Training
 # ==============================
 history = model.fit(
     train_data,
     validation_data=val_data,
-    epochs=20,
+    epochs=30,
     callbacks=[checkpoint, early_stop, reduce_lr]
 )
 
-# ==============================
-# EVALUATION
-# ==============================
-from tensorflow.keras.models import load_model
-from sklearn.metrics import confusion_matrix, classification_report
-
-best_model = load_model("best_inceptionv3.keras")
-
-preds = best_model.predict(val_data)
-y_pred = np.argmax(preds, axis=1)
-y_true = val_data.classes
-
-cm = confusion_matrix(y_true, y_pred)
-
-print("Confusion Matrix:\n", cm)
-
-print("\nClassification Report:\n")
-print(classification_report(
-    y_true,
-    y_pred,
-    target_names=list(val_data.class_indices.keys())
-))
-
-plt.figure(figsize=(10,8))
-sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-            xticklabels=val_data.class_indices.keys(),
-            yticklabels=val_data.class_indices.keys())
-
-plt.xlabel('Predicted')
-plt.ylabel('Actual')
-plt.title('Confusion Matrix')
-plt.show()
-
-plt.plot(history.history['accuracy'])
-plt.plot(history.history['val_accuracy'])
-plt.title('Model Accuracy')
-plt.xlabel('Epoch')
-plt.ylabel('Accuracy')
-plt.legend(['Train','Validation'])
-plt.show()
-
-print("Final Train Accuracy:", history.history['accuracy'][-1])
-print("Final Val Accuracy:", history.history['val_accuracy'][-1])
+print("Training Finished")
