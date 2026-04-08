@@ -5,7 +5,11 @@ from tkinter import filedialog
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
+from collections import Counter
 
+# =========================
+# Class Mapping (38 Classes)
+# =========================
 class_indices = {
     'Apple___Apple_scab': 0, 'Apple___Black_rot': 1, 'Apple___Cedar_apple_rust': 2, 'Apple___healthy': 3,
     'Blueberry___healthy': 4, 'Cherry_(including_sour)___Powdery_mildew': 5, 'Cherry_(including_sour)___healthy': 6,
@@ -25,19 +29,31 @@ class_indices = {
 idx_to_class = {v: k for k, v in class_indices.items()}
 
 # =========================
-# Load Model
+# Load Model Function
 # =========================
-def load_models(modelPath):
-    model_path = os.path.join("..", modelPath) 
+def load_models_func(model_filename):
+    model_path = os.path.join("..",model_filename) 
 
     print(f"Loading model from: {model_path}...")
     try:
         model = load_model(model_path, compile=False)
-        print("Model loaded successfully!\n")
+        print(f"Model {model_filename} loaded successfully!")
         return model
     except Exception as e:
-        print(f"Error loading model: {e}")
-        exit()
+        print(f"Error loading {model_filename}: {e}")
+        return None
+
+# =========================
+# Prediction Function
+# =========================
+def get_prediction(img_path, model):
+    if model is None: return None
+    img = image.load_img(img_path, target_size=(224, 224))
+    x = image.img_to_array(img)
+    x = x / 255.0
+    x = np.expand_dims(x, axis=0)
+    preds = model.predict(x, verbose=0)
+    return preds[0]
 
 # =========================
 # Browse Image
@@ -45,75 +61,57 @@ def load_models(modelPath):
 def browse_image():
     root = tk.Tk()
     root.withdraw()
-    file_path = filedialog.askopenfilename(
-        title="Select Image",
-        filetypes=[("Image files", "*.jpg *.jpeg *.png")]
-    )
+    file_path = filedialog.askopenfilename(title="Select Image")
     root.destroy()
     return file_path
 
 # =========================
-# Prediction
-# =========================
-def predict_vgg19(img_path, model):
-    # 1. Load image with target size matching training (224, 224)
-    img = image.load_img(img_path, target_size=(224, 224))
-    x = image.img_to_array(img)
-
-    x = x / 255.0
-
-    x = np.expand_dims(x, axis=0)
-
-    preds = model.predict(x)
-    return preds
-
-# =========================
-# Main
+# Main Execution
 # =========================
 
-# call models
-VGG19_MODEL = "VGG19.h5"
-VGG16_MODEL = "VGG16.h5"
-RESNET101V2_MODEL = "resnet101v2.h5"
-VGG19model = load_models(VGG19_MODEL)
-VGG16model = load_models(VGG16_MODEL)
-resnet101v2Model = load_models(RESNET101V2_MODEL)
+vgg19_m = load_models_func("VGG19.h5")
+vgg16_m = load_models_func("VGG16.h5")
+resnet_m = load_models_func("resnet101v2.h5")
 
 selected_img = browse_image()
 
-if selected_img:
-    predictions = predict_vgg19(selected_img, resnet101v2Model)[0]
+if selected_img and all([vgg19_m, vgg16_m, resnet_m]):
+    p1 = get_prediction(selected_img, vgg19_m)
+    p2 = get_prediction(selected_img, vgg16_m)
+    p3 = get_prediction(selected_img, resnet_m)
 
-    top3_indices = np.argsort(predictions)[-3:][::-1]
+    c1 = np.argmax(p1)
+    c2 = np.argmax(p2)
+    c3 = np.argmax(p3)
+
+    results = [c1, c2, c3]
+    confidences = [p1[c1], p2[c2], p3[c3]]
+    
+    occurence_count = Counter(results)
+    most_common_class, count = occurence_count.most_common(1)[0]
 
     print("\n" + "="*60)
     print(f"File: {os.path.basename(selected_img)}")
     print("="*60)
+    print(f"VGG19 Predicted    : {idx_to_class[c1]} ({p1[c1]*100:.2f}%)")
+    print(f"VGG16 Predicted    : {idx_to_class[c2]} ({p2[c2]*100:.2f}%)")
+    print(f"ResNet101 Predicted: {idx_to_class[c3]} ({p3[c3]*100:.2f}%)")
+    print("-" * 60)
 
-    for i, idx in enumerate(top3_indices):
-        class_name = idx_to_class.get(idx, "Unknown")
-        confidence = predictions[idx] * 100
-
-        if "___" in class_name:
-            plant, disease = class_name.split("___")
-        else:
-            plant, disease = class_name, ""
-
-        print(f"Top {i+1}:")
-        print(f"  Plant      : {plant}")
-        print(f"  Disease    : {disease.replace('_', ' ')}")
-        print(f"  Confidence : {confidence:.2f}%")
-        print("-"*40)
-
-    best_idx = top3_indices[0]
-    best_conf = predictions[best_idx]
-
-    print("="*60)
-    if best_conf < 0.5:
-        print("Warning: Model is not confident. Please use a clearer image.")
+    if count >= 2:
+        final_idx = most_common_class
+        reason = f"Majority Vote ({count}/3 models agreed)"
     else:
-        print(f"Final Prediction: {idx_to_class[best_idx]} ({best_conf*100:.2f}%)")
+        final_idx = results[np.argmax(confidences)]
+        reason = "Highest Confidence (No majority agreement)"
+
+    final_class_name = idx_to_class[final_idx]
+    final_conf = confidences[results.index(final_idx)]
+
+    print(f"FINAL DECISION: {final_class_name}")
+    print(f"Confidence    : {final_conf*100:.2f}%")
+    print(f"Based on      : {reason}")
     print("="*60)
 
 else:
-    print("No file selected.")
+    print("Execution failed: Image not selected or models not loaded.")
