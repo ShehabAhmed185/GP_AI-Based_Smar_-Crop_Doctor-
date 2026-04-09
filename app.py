@@ -38,7 +38,6 @@ class AgriculturalAI:
 
     def load_all_models(self):
         print("--- Loading All Models ---")
-        # تحميل نماذج الرؤية الحاسوبية (Deep Learning)
         dl_models = ["VGG19.h5", "VGG16.h5", "resnet101v2.h5", "InceptionV3.h5"]
         for m_name in dl_models:
             path = os.path.join(self.models_dir, m_name)
@@ -48,7 +47,6 @@ class AgriculturalAI:
             except Exception as e:
                 print(f"Failed to load {m_name}: {e}")
 
-        # تحميل نماذج البيانات الجدولية (Machine Learning)
         try:
             self.models['crop_model'] = joblib.load(os.path.join(self.models_dir, "crop_model.pkl"))
             self.models['le_crop'] = joblib.load(os.path.join(self.models_dir, "crop_label_encoder.pkl"))
@@ -63,11 +61,10 @@ class AgriculturalAI:
     # ==========================================
     
     def predict_disease(self, img_path):
-        """التعرف على مرض النبات باستخدام 4 موديلات (Ensemble)"""
+        """Plant Disease Detection (Ensemble)"""
         results = []
         confidences = []
         
-        # أحجام المدخلات لكل موديل
         configs = {
             "VGG19.h5": 224, "VGG16.h5": 224, "resnet101v2.h5": 224, "InceptionV3_Fixed.h5": 299
         }
@@ -82,7 +79,6 @@ class AgriculturalAI:
                 results.append(idx)
                 confidences.append(preds[idx])
 
-        # التصويت بالأغلبية
         occurence = Counter(results)
         most_common, count = occurence.most_common(1)[0]
         
@@ -94,14 +90,12 @@ class AgriculturalAI:
         }
 
     def recommend_crop_and_fert(self, env_data):
-        """توصية المحصول والسماد بناءً على بيانات البيئة"""
+        """Fertilizer Recommendtion"""
         df = pd.DataFrame([env_data])
         
-        # 1. توقع المحصول
         crop_pred = self.models['crop_model'].predict(df)
         crop_name = self.models['le_crop'].inverse_transform(crop_pred)[0]
         
-        # 2. توقع السماد (إضافة المحصول المتوقع للبيانات)
         df['Crop'] = crop_name
         fert_pred = self.models['fert_model'].predict(df)
         fert_name = self.models['le_fert'].inverse_transform(fert_pred)[0]
@@ -111,34 +105,147 @@ class AgriculturalAI:
             "recommended_fertilizer": fert_name
         }
 
+
 # ==========================================
-# 4. نقطة الدخول الرئيسية (Application Entry)
+# 4. Application Entry (Interactive CLI)
 # ==========================================
 if __name__ == "__main__":
-    # تشغيل النظام
-    ai_system = AgriculturalAI(models_dir="..") # تأكد من أن النماذج في المجلد الأب
 
-    print("\n" + "="*40)
-    print("--- STEP 1: Disease Diagnosis ---")
-    image_path = os.path.join("..", "data", "val_imgs", "PlantVillage", "val","Apple___Cedar_apple_rust","4e6676b6-154c-4f7d-a355-bcc00a397c3d___FREC_C.Rust 9853.jpg")   
-    if os.path.exists(image_path):
-        disease_result = ai_system.predict_disease(image_path)
-        print(f"Result: {disease_result}")
+    ai_system = AgriculturalAI(models_dir="..")
+
+    print("\n==============================")
+    print(" Intelligent Agricultural AI ")
+    print("==============================")
+
+    print("\nSelect Service:")
+    print("1 - Plant Disease Detection")
+    print("2 - Recommend Crop & Fertilizer from Soil Data")
+    print("3 - Recommend Fertilizer for Specific Crop")
+
+    choice = input("\nEnter your choice (1/2/3): ")
+
+    # =====================================
+    # 1️⃣ Plant Disease Detection
+    # =====================================
+    if choice == "1":
+
+        img_path = input("Enter plant image path: ")
+
+        if os.path.exists(img_path):
+            result = ai_system.predict_disease(img_path)
+
+            print("\n--- Diagnosis Result ---")
+            print("Disease    :", result["disease"])
+            print("Confidence :", result["confidence"])
+            print("Agreement  :", result["agreement"])
+
+        else:
+            print("Image not found.")
+
+    # =====================================
+    # 2️⃣ Soil → Crop + Fertilizer
+    # =====================================
+    elif choice == "2":
+
+        print("\nEnter Soil & Environment Data:")
+
+        Nitrogen = float(input("Nitrogen: "))
+        Phosphorus = float(input("Phosphorus: "))
+        Potassium = float(input("Potassium: "))
+        pH = float(input("pH: "))
+        Rainfall = float(input("Rainfall: "))
+        Temperature = float(input("Temperature: "))
+        Soil_color = input("Soil Color: ")
+
+        env_data = {
+            "Nitrogen": Nitrogen,
+            "Phosphorus": Phosphorus,
+            "Potassium": Potassium,
+            "pH": pH,
+            "Rainfall": Rainfall,
+            "Temperature": Temperature,
+            "Soil_color": Soil_color
+        }
+
+        result = ai_system.recommend_crop_and_fert(env_data)
+
+        print("\n--- Recommendation ---")
+        print("Recommended Crop       :", result["recommended_crop"])
+        print("Recommended Fertilizer :", result["recommended_fertilizer"])
+
+    # =====================================
+    # 3️⃣ Crop → Fertilizer
+    # =====================================
+    elif choice == "3":
+
+        print("\nEnter Soil Data + Crop")
+
+        Nitrogen = float(input("Nitrogen: "))
+        Phosphorus = float(input("Phosphorus: "))
+        Potassium = float(input("Potassium: "))
+        pH = float(input("pH: "))
+        Rainfall = float(input("Rainfall: "))
+        Temperature = float(input("Temperature: "))
+        Soil_color = input("Soil Color: ")
+        Crop = input("Crop Name: ")
+
+        df = pd.DataFrame([{
+            "Nitrogen": Nitrogen,
+            "Phosphorus": Phosphorus,
+            "Potassium": Potassium,
+            "pH": pH,
+            "Rainfall": Rainfall,
+            "Temperature": Temperature,
+            "Soil_color": Soil_color,
+            "Crop": Crop
+        }])
+
+        fert_pred = ai_system.models['fert_model'].predict(df)
+        fert_name = ai_system.models['le_fert'].inverse_transform(fert_pred)[0]
+
+        print("\n--- Fertilizer Recommendation ---")
+        print("Recommended Fertilizer :", fert_name)
+
     else:
-        print("Image file not found, skipping diagnosis.")
+        print("Invalid choice.")
 
-    print("\n--- STEP 2: Crop & Fertilizer Recommendation ---")
-    # محاكاة مدخلات المستخدم
-    user_env_input = {
-        "Nitrogen": 90,
-        "Phosphorus": 42,
-        "Potassium": 43,
-        "pH": 6.5,
-        "Rainfall": 200,
-        "Temperature": 25,
-        "Soil_color": "Black"
-    }
+
+
+#../data/val_imgs/PlantVillage/val/Apple___Cedar_apple_rust/4e6676b6-154c-4f7d-a355-bcc00a397c3d___FREC_C.Rust 9853.jpg2
+
+
+
+
+
+
+
+
+# # ==========================================
+# # 4. نقطة الدخول الرئيسية (Application Entry)
+# # ==========================================
+# if __name__ == "__main__":
+#     ai_system = AgriculturalAI(models_dir="..") 
+
+#     print("\n" + "="*40)
+#     print("--- STEP 1: Disease Diagnosis ---")
+#     image_path = os.path.join("..", "data", "val_imgs", "PlantVillage", "val","Apple___Cedar_apple_rust","4e6676b6-154c-4f7d-a355-bcc00a397c3d___FREC_C.Rust 9853.jpg")   
+#     if os.path.exists(image_path):
+#         disease_result = ai_system.predict_disease(image_path)
+#         print(f"Result: {disease_result}")
+#     else:
+#         print("Image file not found, skipping diagnosis.")
+
+#     print("\n--- STEP 2: Crop & Fertilizer Recommendation ---")
+#     user_env_input = {
+#         "Nitrogen": 90,
+#         "Phosphorus": 42,
+#         "Potassium": 43,
+#         "pH": 6.5,
+#         "Rainfall": 200,
+#         "Temperature": 25,
+#         "Soil_color": "Black"
+#     }
     
-    reco_result = ai_system.recommend_crop_and_fert(user_env_input)
-    print(f"Recommendation: {reco_result}")
-    print("="*40)
+#     reco_result = ai_system.recommend_crop_and_fert(user_env_input)
+#     print(f"Recommendation: {reco_result}")
+#     print("="*40)
