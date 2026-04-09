@@ -60,7 +60,7 @@ class AgriculturalAI:
     # 3. وظائف المعالجة (Processing Logic)
     # ==========================================
     
-    def predict_disease(self, img_path):
+    def predict_disease(self, img):
         """Plant Disease Detection (Ensemble)"""
         results = []
         confidences = []
@@ -71,8 +71,8 @@ class AgriculturalAI:
 
         for m_name, size in configs.items():
             if m_name in self.models:
-                img = image.load_img(img_path, target_size=(size, size))
-                x = image.img_to_array(img) / 255.0
+                img_resized = img.resize((size, size))
+                x = image.img_to_array(img_resized) / 255.0
                 x = np.expand_dims(x, axis=0)
                 preds = self.models[m_name].predict(x, verbose=0)[0]
                 idx = np.argmax(preds)
@@ -129,10 +129,19 @@ if __name__ == "__main__":
     # =====================================
     if choice == "1":
 
-        img_path = input("Enter plant image path: ")
-
+        img_path = os.path.join(
+            "..",
+            "data",
+            "val_imgs",
+            "PlantVillage",
+            "val",
+            "Apple___Cedar_apple_rust",
+            "4e6676b6-154c-4f7d-a355-bcc00a397c3d___FREC_C.Rust 9853.jpg"
+        )        # img = image.load_img(img_path, target_size=(size, size))
+            
         if os.path.exists(img_path):
-            result = ai_system.predict_disease(img_path)
+            img = image.load_img(img_path)
+            result = ai_system.predict_disease(img)
 
             print("\n--- Diagnosis Result ---")
             print("Disease    :", result["disease"])
@@ -210,8 +219,6 @@ if __name__ == "__main__":
         print("Invalid choice.")
 
 
-
-#../data/val_imgs/PlantVillage/val/Apple___Cedar_apple_rust/4e6676b6-154c-4f7d-a355-bcc00a397c3d___FREC_C.Rust 9853.jpg2
 
 
 
