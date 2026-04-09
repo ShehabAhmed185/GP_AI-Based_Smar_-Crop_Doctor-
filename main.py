@@ -32,8 +32,7 @@ idx_to_class = {v: k for k, v in class_indices.items()}
 # Load Model Function
 # =========================
 def load_models_func(model_filename):
-    model_path = os.path.join("..",model_filename) 
-
+    model_path = os.path.join("..", model_filename) 
     print(f"Loading model from: {model_path}...")
     try:
         model = load_model(model_path, compile=False)
@@ -44,11 +43,11 @@ def load_models_func(model_filename):
         return None
 
 # =========================
-# Prediction Function
+# Prediction Function (Updated for Multi-size)
 # =========================
-def get_prediction(img_path, model):
+def get_prediction(img_path, model, target_size=(224, 224)):
     if model is None: return None
-    img = image.load_img(img_path, target_size=(224, 224))
+    img = image.load_img(img_path, target_size=target_size)
     x = image.img_to_array(img)
     x = x / 255.0
     x = np.expand_dims(x, axis=0)
@@ -68,24 +67,23 @@ def browse_image():
 # =========================
 # Main Execution
 # =========================
-
 vgg19_m = load_models_func("VGG19.h5")
 vgg16_m = load_models_func("VGG16.h5")
 resnet_m = load_models_func("resnet101v2.h5")
+inception_m = load_models_func("inceptionv3.h5") 
 
 selected_img = browse_image()
 
-if selected_img and all([vgg19_m, vgg16_m, resnet_m]):
-    p1 = get_prediction(selected_img, vgg19_m)
-    p2 = get_prediction(selected_img, vgg16_m)
-    p3 = get_prediction(selected_img, resnet_m)
+if selected_img and all([vgg19_m, vgg16_m, resnet_m, inception_m]):
+    p1 = get_prediction(selected_img, vgg19_m, target_size=(224, 224))
+    p2 = get_prediction(selected_img, vgg16_m, target_size=(224, 224))
+    p3 = get_prediction(selected_img, resnet_m, target_size=(224, 224))
+    p4 = get_prediction(selected_img, inception_m, target_size=(299, 299))
 
-    c1 = np.argmax(p1)
-    c2 = np.argmax(p2)
-    c3 = np.argmax(p3)
+    c1, c2, c3, c4 = np.argmax(p1), np.argmax(p2), np.argmax(p3), np.argmax(p4)
 
-    results = [c1, c2, c3]
-    confidences = [p1[c1], p2[c2], p3[c3]]
+    results = [c1, c2, c3, c4]
+    confidences = [p1[c1], p2[c2], p3[c3], p4[c4]]
     
     occurence_count = Counter(results)
     most_common_class, count = occurence_count.most_common(1)[0]
@@ -96,11 +94,12 @@ if selected_img and all([vgg19_m, vgg16_m, resnet_m]):
     print(f"VGG19 Predicted    : {idx_to_class[c1]} ({p1[c1]*100:.2f}%)")
     print(f"VGG16 Predicted    : {idx_to_class[c2]} ({p2[c2]*100:.2f}%)")
     print(f"ResNet101 Predicted: {idx_to_class[c3]} ({p3[c3]*100:.2f}%)")
+    print(f"InceptionV3 Predicted: {idx_to_class[c4]} ({p4[c4]*100:.2f}%)")
     print("-" * 60)
 
     if count >= 2:
         final_idx = most_common_class
-        reason = f"Majority Vote ({count}/3 models agreed)"
+        reason = f"Majority Vote ({count}/4 models agreed)"
     else:
         final_idx = results[np.argmax(confidences)]
         reason = "Highest Confidence (No majority agreement)"
@@ -112,6 +111,5 @@ if selected_img and all([vgg19_m, vgg16_m, resnet_m]):
     print(f"Confidence    : {final_conf*100:.2f}%")
     print(f"Based on      : {reason}")
     print("="*60)
-
 else:
     print("Execution failed: Image not selected or models not loaded.")
